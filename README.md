@@ -235,6 +235,24 @@ The models are evaluated using comprehensive metrics:
 
 ## MLflow Integration
 
+### Why MLflow?
+
+We integrated MLflow to transition from a "one-off script" approach to a professional **MLOps workflow**. It solves several critical problems:
+
+1.  **Eliminating "Metric Drift"**: Without MLflow, you might run ten experiments and forget which combination of parameters gave the best ROC AUC. MLflow logs everything automatically.
+2.  **Reproducibility**: It captures the exact code version, hyperparameters, and environment, ensuring that a "best model" found today can be recreated six months from now.
+3.  **Model Registry**: It provides a central place to manage model versions, making it easy to track which model is in "Staging" vs "Production".
+4.  **Artifact Management**: It stores not just the model, but also the metadata, plots, and preprocessors associated with a specific training run.
+
+### Where is it Implemented?
+
+The MLflow logic is primarily situated in:
+*   **`churn_model/model_training.py`**: The `ModelTrainer.train()` method wraps the training loop in an `mlflow.start_run()` context. It uses:
+    *   `mlflow.log_params()`: To save model settings (e.g., `n_estimators`, `C`).
+    *   `mlflow.log_metrics()`: To save performance scores (ROC AUC, F1).
+    *   `mlflow.sklearn.log_model()`: To serialize and save the model artifact.
+*   **`churn_model/main.py`**: Coordinates the experiment naming and ensures all runs are grouped under the `customer_churn_analysis` experiment.
+
 ### Viewing Experiments
 
 Launch the MLflow UI to explore experiments:
@@ -248,15 +266,6 @@ Navigate to `http://localhost:5000` to view:
 - Hyperparameter configurations
 - Performance metrics over time
 - Model artifacts and versions
-
-### Experiment Tracking
-
-All training runs automatically log:
-- Model hyperparameters
-- Performance metrics
-- Feature importance scores
-- Training duration
-- Model artifacts
 
 ### Model Registry
 
