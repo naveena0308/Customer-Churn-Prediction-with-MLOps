@@ -18,6 +18,8 @@ class ModelTrainer:
         self.best_model = None
         self.best_score = 0          # best ROC AUC across models
         self.best_f1 = 0             # F1 at optimal threshold for best model
+        self.best_prec = 0
+        self.best_rec = 0
         self.best_threshold = 0.5    # optimal decision threshold
         self.best_model_name = ""
 
@@ -139,13 +141,18 @@ class ModelTrainer:
                 print(
                     f"{model_name:20s} | "
                     f"ROC AUC: {metrics['roc_auc']:.4f} | "
-                    f"F1 (opt thresh={opt_threshold:.2f}): {opt_f1:.4f}"
+                    f"Prec: {metrics['precision']:.4f} | "
+                    f"Rec: {metrics['recall']:.4f} | "
+                    f"F1: {opt_f1:.4f} "
+                    f"(thresh={opt_threshold:.2f})"
                 )
 
                 # Select best model by ROC AUC; tie-break on F1
                 if metrics["roc_auc"] > self.best_score:
                     self.best_score = metrics["roc_auc"]
                     self.best_f1 = opt_f1
+                    self.best_prec = metrics["precision"]
+                    self.best_rec = metrics["recall"]
                     self.best_threshold = opt_threshold
                     self.best_model = model
                     self.best_model_name = model_name
@@ -153,6 +160,8 @@ class ModelTrainer:
         print(
             f"\n>> Best Model : {self.best_model_name}"
             f"\n   ROC AUC   : {self.best_score:.4f}"
+            f"\n   Precision : {self.best_prec:.4f}"
+            f"\n   Recall    : {self.best_rec:.4f}"
             f"\n   F1 (opt)  : {self.best_f1:.4f}"
             f"\n   Threshold : {self.best_threshold:.4f}"
         )
