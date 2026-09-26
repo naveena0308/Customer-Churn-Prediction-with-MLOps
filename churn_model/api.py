@@ -7,6 +7,7 @@ Endpoints:
   POST /predict/batch  - Batch prediction for multiple customers
 """
 
+import logging
 from contextlib import asynccontextmanager
 from typing import List, Literal, Optional
 
@@ -17,7 +18,11 @@ from pydantic import BaseModel, Field
 from churn_model import config
 from churn_model.predict import ChurnPredictor
 
-# ── Global model holder ────────────────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
+logger = logging.getLogger("churn_api")
+
 predictor: Optional[ChurnPredictor] = None
 
 
@@ -27,54 +32,74 @@ async def lifespan(app: FastAPI):
     global predictor
     try:
         predictor = ChurnPredictor(model_path=config.MODEL_PATH)
-        print("✅ Model loaded successfully.")
+        logger.info(
+            "Model artifacts loaded successfully from %s (Threshold: %.4f)",
+            config.MODEL_PATH,
+            predictor.threshold,
+        )
     except Exception as e:
-        print(f"❌ Model failed to load: {e}")
+        logger.warning(
+            "Model failed to load on startup: %s. Predictions will be unavailable until trained.",
+            e,
+        )
         predictor = None
     yield
     predictor = None
-    print("Model unloaded.")
+    logger.info("Model artifacts unloaded.")
 
 
-# ── App definition ─────────────────────────────────────────────────────────────
 app = FastAPI(
     title="Customer Churn Prediction API",
     description=(
-        "Production-ready REST API for telecom customer churn prediction. "
-        "Powered by a RandomForest / Logistic Regression ensemble selected by ROC AUC, "
-        "tracked with MLflow."
+        "Production-grade REST API for telecom customer churn prediction. "
+        "Selected by ROC AUC, tracked with MLflow, and optimized for F1 threshold."
     ),
     version="1.0.0",
     lifespan=lifespan,
 )
 
 
-# ── Pydantic schemas ───────────────────────────────────────────────────────────
 class CustomerInput(BaseModel):
-    gender: Literal["Female", "Male"] = Field(..., example="Female")
-    SeniorCitizen: int = Field(..., ge=0, le=1, example=0)
-    Partner: Literal["Yes", "No"] = Field(..., example="Yes")
-    Dependents: Literal["Yes", "No"] = Field(..., example="No")
-    tenure: int = Field(..., ge=0, example=12)
-    PhoneService: Literal["Yes", "No"] = Field(..., example="Yes")
-    MultipleLines: Literal["Yes", "No", "No phone service"] = Field(..., example="No")
-    InternetService: Literal["DSL", "Fiber optic", "No"] = Field(..., example="DSL")
-    OnlineSecurity: Literal["Yes", "No", "No internet service"] = Field(..., example="Yes")
-    OnlineBackup: Literal["Yes", "No", "No internet service"] = Field(..., example="No")
-    DeviceProtection: Literal["Yes", "No", "No internet service"] = Field(..., example="No")
-    TechSupport: Literal["Yes", "No", "No internet service"] = Field(..., example="No")
-    StreamingTV: Literal["Yes", "No", "No internet service"] = Field(..., example="No")
-    StreamingMovies: Literal["Yes", "No", "No internet service"] = Field(..., example="No")
-    Contract: Literal["Month-to-month", "One year", "Two year"] = Field(..., example="Month-to-month")
-    PaperlessBilling: Literal["Yes", "No"] = Field(..., example="Yes")
+    gender: Literal["Female", "Male"] = Field(..., examples=["Female"])
+    SeniorCitizen: int = Field(..., ge=0, le=1, examples=[0])
+    Partner: Literal["Yes", "No"] = Field(..., examples=["Yes"])
+    Dependents: Literal["Yes", "No"] = Field(..., examples=["No"])
+    tenure: int = Field(..., ge=0, examples=[12])
+    PhoneService: Literal["Yes", "No"] = Field(..., examples=["Yes"])
+    MultipleLines: Literal["Yes", "No", "No phone service"] = Field(
+        ..., examples=["No"]
+    )
+    InternetService: Literal["DSL", "Fiber optic", "No"] = Field(..., examples=["DSL"])
+    OnlineSecurity: Literal["Yes", "No", "No internet service"] = Field(
+        ..., examples=["Yes"]
+    )
+    OnlineBackup: Literal["Yes", "No", "No internet service"] = Field(
+        ..., examples=["No"]
+    )
+    DeviceProtection: Literal["Yes", "No", "No internet service"] = Field(
+        ..., examples=["No"]
+    )
+    TechSupport: Literal["Yes", "No", "No internet service"] = Field(
+        ..., examples=["No"]
+    )
+    StreamingTV: Literal["Yes", "No", "No internet service"] = Field(
+        ..., examples=["No"]
+    )
+    StreamingMovies: Literal["Yes", "No", "No internet service"] = Field(
+        ..., examples=["No"]
+    )
+    Contract: Literal["Month-to-month", "One year", "Two year"] = Field(
+        ..., examples=["Month-to-month"]
+    )
+    PaperlessBilling: Literal["Yes", "No"] = Field(..., examples=["Yes"])
     PaymentMethod: Literal[
-        "Electronic check", "Mailed check",
-        "Bank transfer (automatic)", "Credit card (automatic)"
-    ] = Field(..., example="Electronic check")
-    MonthlyCharges: float = Field(..., ge=0, example=70.35)
-    TotalCharges: float = Field(..., ge=0, example=846.0)
-
-    model_config = {"json_schema_extra": {"examples": [{}]}}
+        "Electronic check",
+        "Mailed check",
+        "Bank transfer (automatic)",
+        "Credit card (automatic)",
+    ] = Field(..., examples=["Electronic check"])
+    MonthlyCharges: float = Field(..., ge=0, examples=[70.35])
+    TotalCharges: float = Field(..., ge=0, examples=[846.0])
 
 
 class PredictionResponse(BaseModel):
@@ -95,23 +120,9 @@ class HealthResponse(BaseModel):
     api_version: str
 
 
-# ── Helpers ────────────────────────────────────────────────────────────────────
-def _risk_level(prob: float) -> str:
-    if prob < 0.35:
-        return "LOW"
-    elif prob < 0.65:
-        return "MEDIUM"
-    return "HIGH"
-
-
-def _customer_to_df(customer: CustomerInput) -> pd.DataFrame:
-    return pd.DataFrame([customer.model_dump()])
-
-
-# ── Routes ─────────────────────────────────────────────────────────────────────
 @app.get("/health", response_model=HealthResponse, tags=["Health"])
 def health():
-    """Liveness + readiness check."""
+    """Liveness and readiness health check."""
     return HealthResponse(
         status="ok" if predictor is not None else "degraded",
         model_loaded=predictor is not None,
@@ -124,50 +135,52 @@ def health():
 def predict(customer: CustomerInput):
     """
     Predict churn for a single customer.
-    Returns binary prediction, probability score, and risk tier.
+    Returns binary prediction, calibrated probability score, and risk tier.
     """
     if predictor is None:
-        raise HTTPException(status_code=503, detail="Model not loaded. Run training pipeline first.")
+        raise HTTPException(
+            status_code=503,
+            detail="Model not loaded. Ensure models/ directory contains trained artifacts.",
+        )
 
-    df = _customer_to_df(customer)
     try:
-        result = predictor.predict(df)
+        record = customer.model_dump()
+        result = predictor.predict_record(record)
+        return PredictionResponse(**result)
     except Exception as e:
+        logger.error("Prediction failed: %s", e)
         raise HTTPException(status_code=422, detail=f"Prediction error: {str(e)}")
-
-    prob = float(result["Churn_Probability"].iloc[0])
-    pred = int(result["Predicted_Churn"].iloc[0])
-    return PredictionResponse(
-        predicted_churn=pred,
-        churn_probability=round(prob, 4),
-        risk_level=_risk_level(prob),
-    )
 
 
 @app.post("/predict/batch", response_model=BatchPredictionResponse, tags=["Prediction"])
 def predict_batch(customers: List[CustomerInput]):
     """
-    Predict churn for a list of customers in a single call.
+    Predict churn for a batch of customers in a single request.
     """
     if predictor is None:
-        raise HTTPException(status_code=503, detail="Model not loaded. Run training pipeline first.")
+        raise HTTPException(
+            status_code=503,
+            detail="Model not loaded. Ensure models/ directory contains trained artifacts.",
+        )
     if len(customers) == 0:
         raise HTTPException(status_code=400, detail="Customer list must not be empty.")
     if len(customers) > 1000:
-        raise HTTPException(status_code=400, detail="Batch size limited to 1000 customers per request.")
-
-    df = pd.DataFrame([c.model_dump() for c in customers])
-    try:
-        result = predictor.predict(df)
-    except Exception as e:
-        raise HTTPException(status_code=422, detail=f"Batch prediction error: {str(e)}")
-
-    predictions = [
-        PredictionResponse(
-            predicted_churn=int(row["Predicted_Churn"]),
-            churn_probability=round(float(row["Churn_Probability"]), 4),
-            risk_level=_risk_level(float(row["Churn_Probability"])),
+        raise HTTPException(
+            status_code=400, detail="Batch size limited to 1000 customers per request."
         )
-        for _, row in result.iterrows()
-    ]
-    return BatchPredictionResponse(total=len(predictions), predictions=predictions)
+
+    try:
+        df = pd.DataFrame([c.model_dump() for c in customers])
+        result_df = predictor.predict(df)
+        predictions = [
+            PredictionResponse(
+                predicted_churn=int(row["Predicted_Churn"]),
+                churn_probability=float(row["Churn_Probability"]),
+                risk_level=str(row["Risk_Tier"]),
+            )
+            for _, row in result_df.iterrows()
+        ]
+        return BatchPredictionResponse(total=len(predictions), predictions=predictions)
+    except Exception as e:
+        logger.error("Batch prediction failed: %s", e)
+        raise HTTPException(status_code=422, detail=f"Batch prediction error: {str(e)}")

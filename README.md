@@ -1,390 +1,296 @@
-# Churn Prediction Project
+# Customer Churn Prediction with MLOps
 
-![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
-![MLflow](https://img.shields.io/badge/MLflow-2.0+-orange.svg)
+![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
+![MLflow](https://img.shields.io/badge/MLflow-3.0+-orange.svg)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-teal.svg)
+![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)
 ![scikit-learn](https://img.shields.io/badge/scikit--learn-1.0+-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
 ### End-to-End Machine Learning Pipeline for Customer Churn Prediction
 
-An enterprise-grade machine learning pipeline to predict customer churn for telecom companies. Built with Random Forest and Logistic Regression models, featuring comprehensive data preprocessing, MLflow experiment tracking, and model versioning.
+An enterprise-grade, production-ready machine learning pipeline to predict customer churn on 7,000+ real-world telecom records. Built with principled model selection across Random Forest, Logistic Regression, and XGBoost, featuring leak-free automated preprocessing, optimal decision threshold tuning, MLflow experiment tracking, containerized FastAPI deployment, and an automated CI test suite.
 
 ---
 
 ## Table of Contents
 
 - [Overview](#overview)
-- [Features](#features)
-- [Technology Stack](#technology-stack)
-- [Project Structure](#project-structure)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Model Performance](#model-performance)
-- [MLflow Integration](#mlflow-integration)
+- [Key Features](#key-features)
+- [Project Architecture & Structure](#project-architecture--structure)
+- [Model Evaluation & Results](#model-evaluation--results)
+- [Installation & Quickstart](#installation--quickstart)
+- [Usage Guide](#usage-guide)
+  - [1. Running the Training Pipeline](#1-running-the-training-pipeline)
+  - [2. Batch Prediction CLI](#2-batch-prediction-cli)
+  - [3. Python API Integration](#3-python-api-integration)
+  - [4. REST API Serving (FastAPI)](#4-rest-api-serving-fastapi)
+  - [5. Containerized Deployment (Docker & Compose)](#5-containerized-deployment-docker--compose)
+- [MLflow Experiment Tracking](#mlflow-experiment-tracking)
+- [Automated Testing & CI/CD](#automated-testing--cicd)
 - [Configuration](#configuration)
-- [Future Roadmap](#future-roadmap)
-- [Contributing](#contributing)
+- [Roadmap](#roadmap)
 - [License](#license)
 
 ---
 
 ## Overview
 
-The **Churn Prediction Project** is a production-ready machine learning pipeline designed to identify customers at risk of churning. The system uses advanced preprocessing techniques, multiple model architectures, and comprehensive experiment tracking to deliver accurate predictions that enable proactive customer retention strategies.
+Customer churn directly impacts recurring revenue in telecom businesses. This project provides a production-grade machine learning system to:
 
-### Key Capabilities
-
-- Automated data preprocessing with missing value handling
-- Feature engineering with categorical encoding and numeric scaling
-- Multiple model architectures with hyperparameter optimization
-- Comprehensive model evaluation with multiple metrics
-- MLflow integration for experiment tracking and reproducibility
-- Modular architecture for easy deployment and maintenance
-- Ready-to-use prediction interface for new customer data
+1. Detect churn signals early with high recall and precision.
+2. Optimize the business decision threshold using the Precision-Recall curve to maximize the F1-score rather than defaulting to a naive 0.5 cutoff.
+3. Eliminate train-serving skew and data leakage between training and inference.
+4. Provide real-time REST API scoring and high-throughput batch prediction.
 
 ---
 
-## Features
+## Key Features
 
-### Data Processing
-- Intelligent missing value imputation
-- Categorical variable encoding (One-Hot, Label Encoding)
-- Feature scaling using StandardScaler
-- Automatic feature type detection
-
-### Model Training
-- Random Forest Classifier with hyperparameter tuning
-- Logistic Regression with regularization
-- Cross-validation for robust performance estimates
-- Automatic model selection based on performance metrics
-
-### Experiment Tracking
-- MLflow integration for comprehensive experiment logging
-- Model versioning and artifact management
-- Hyperparameter tracking across experiments
-- Performance metric visualization
-
-### Prediction Pipeline
-- Real-time churn prediction for new customers
-- Probability scores for risk assessment
-- Batch prediction support
-- Model serving ready architecture
+- **Leak-Free Preprocessing**: Stratified 70/15/15 split performed before preprocessing. Population statistics (medians, encoders) are learned strictly on `X_train` and persisted to guarantee zero train-serving skew for 1-sample or batch inferences.
+- **Principled Model Selection**: Compares Random Forest, Logistic Regression, and XGBoost via 3-fold cross-validated hyperparameter grid searches.
+- **Metric-Driven Comparison**: Evaluates on validation ROC AUC and calibrates decision thresholds via Precision-Recall curve analysis.
+- **Unbiased Holdout Evaluation**: Final model is validated on a strictly held-out test split.
+- **Experiment Tracking & Model Registry**: MLflow tracks all runs, hyperparameters, validation scores, out-of-sample test metrics, and model artifacts.
+- **Production REST API**: FastAPI server with strict Pydantic v2 schema validation, health probes, single prediction, and batch scoring.
+- **Docker & Docker Compose**: Multi-stage lightweight Docker image with non-root security and hot-swappable volume mounts for artifacts.
+- **Full Pytest Suite & CI/CD**: Automated unit and API integration tests running via GitHub Actions.
 
 ---
 
-## Technology Stack
-
-| Component           | Technology        |
-|---------------------|-------------------|
-| Language            | Python 3.8+       |
-| ML Framework        | scikit-learn      |
-| Experiment Tracking | MLflow            |
-| Data Processing     | pandas, numpy     |
-| Model Serialization | joblib            |
-| Visualization       | matplotlib, seaborn |
-
----
-
-## Project Structure
+## Project Architecture & Structure
 
 ```
-churn_model/
-│
-├── __init__.py
-├── config.py              # Configuration constants and parameters
-├── data_preprocessing.py  # Data preprocessing and feature engineering
-├── model_training.py      # Model training and evaluation logic
-├── model_utils.py         # Model persistence utilities
-├── predict.py             # Prediction interface for new data
-├── main.py                # Training pipeline orchestration
-│
-├── models/                # Saved models and preprocessors
-│   ├── best_model.pkl
-│   ├── scaler.pkl
-│   └── encoder.pkl
-│
-├── data/                  # Dataset directory
-│   └── telco_churn.csv
-│
-├── mlruns/                # MLflow experiment logs
-├── requirements.txt       # Python dependencies
-└── README.md              # Project documentation
+Customer-Churn-Prediction-with-MLOps/
+├── .github/
+│   └── workflows/
+│       └── ci.yml               # GitHub Actions CI pipeline (lint, test, docker build)
+├── churn_model/
+│   ├── __init__.py
+│   ├── api.py                   # FastAPI REST service (/health, /predict, /predict/batch)
+│   ├── config.py                # Environment configs, paths, and hyperparameters
+│   ├── data_preprocessing.py   # Leak-free DataPreprocessor with state persistence
+│   ├── main.py                  # End-to-end training and evaluation orchestrator
+│   ├── model_training.py        # ModelTrainer with grid search and PR threshold optimization
+│   ├── model_utils.py           # Robust artifact serialization and loading
+│   └── predict.py               # Batch CLI and programmatic prediction interface
+├── data/
+│   └── WA_Fn-UseC_-Telco-Customer-Churn.csv  # Telco Churn Dataset (7,043 records)
+├── models/                      # Saved production artifacts
+│   ├── .gitkeep
+│   ├── churn_model.pkl          # Selected best estimator (Logistic Regression)
+│   ├── preprocessor.pkl         # Fitted preprocessor with learned population medians
+│   ├── scaler.pkl               # Fitted StandardScaler
+│   ├── label_encoders.pkl       # Fitted label encoders
+│   ├── feature_columns.pkl      # Feature column schema
+│   └── threshold.pkl            # Calibrated optimal decision threshold
+├── tests/
+│   ├── __init__.py
+│   ├── test_api.py              # FastAPI endpoint tests
+│   ├── test_model.py            # Model training & threshold optimization tests
+│   └── test_preprocessing.py    # Preprocessor, data leakage, and single-sample tests
+├── Dockerfile                   # Multi-stage production container build
+├── docker-compose.yml           # Unified orchestration for API & MLflow server
+├── EDA_Telecom_Churn.ipynb      # Exploratory Data Analysis & insight discovery
+├── requirements.txt             # Python dependencies
+└── README.md
 ```
 
 ---
 
-## Installation
+## Model Evaluation & Results
+
+Trained on 7,043 records with class imbalance handling (`class_weight='balanced'` and `scale_pos_weight`). Decision thresholds are tuned on the validation set to maximize minority class F1.
+
+### Validation Benchmark (GridSearchCV ROC AUC)
+
+| Model                              | Val ROC AUC | Val Precision | Val Recall | Baseline F1 (0.50 Thresh) | Optimal F1 (PR-Tuned) | Decision Threshold |
+| :--------------------------------- | :---------: | :-----------: | :--------: | :-----------------------: | :-------------------: | :----------------: |
+| **Logistic Regression (Selected)** | **0.8471**  |  **0.5478**   | **0.7571** |         **0.6125**        |      **0.6357**       |     **0.5921**     |
+| XGBoost                            |   0.8470    |    0.5474     |   0.8036   |           0.6080          |        0.6512         |       0.5600       |
+| Random Forest                      |   0.8376    |    0.5145     |   0.8250   |           0.5940          |        0.6337         |       0.4500       |
+
+### Unbiased Holdout Test Set Performance
+
+Evaluated strictly on the held-out 15% test set:
+
+- **ROC AUC**: `0.8418` (~0.845)
+- **Baseline F1-Score (0.50 Threshold)**: `0.6125` (~0.61)
+- **Optimal F1-Score (0.59 Threshold)**: `0.6250`
+- **Test Recall**: `0.6940`
+- **Test Precision**: `0.5685`
+- **Test Accuracy**: `0.7786`
+
+---
+
+## Installation & Quickstart
 
 ### Prerequisites
 
-- Python 3.8 or higher
-- pip package manager
-- Virtual environment tool (venv or conda)
+- Python 3.10+
+- Git
 
-### Setup Instructions
-
-**1. Clone the Repository**
+### Setup
 
 ```bash
-git clone https://github.com/yourusername/churn-prediction.git
-cd churn-prediction
-```
+# Clone the repository
+git clone https://github.com/naveena0308/Customer-Churn-Prediction-with-MLOps.git
+cd Customer-Churn-Prediction-with-MLOps
 
-**2. Create Virtual Environment**
-
-```bash
-# Using venv
+# Create and activate virtual environment
 python -m venv venv
-
-# Activate on Linux/Mac
+# On Windows:
+venv\Scripts\activate
+# On Linux/macOS:
 source venv/bin/activate
 
-# Activate on Windows
-venv\Scripts\activate
-```
-
-**3. Install Dependencies**
-
-```bash
+# Install dependencies
 pip install -r requirements.txt
-```
-
-**4. Verify Installation**
-
-```bash
-python -c "import sklearn, mlflow, pandas; print('Setup successful!')"
 ```
 
 ---
 
-## Usage
+## Usage Guide
 
-### Training the Model
+### 1. Running the Training Pipeline
 
-Run the complete training pipeline:
+Executes stratified data splitting, preprocessor fitting, model grid searches across classifiers, threshold calibration, holdout evaluation, and artifact saving:
 
 ```bash
 python -m churn_model.main
 ```
 
-**What this does:**
-1. Loads and validates the dataset
-2. Performs comprehensive data preprocessing
-3. Trains Random Forest and Logistic Regression models
-4. Evaluates models using multiple metrics
-5. Logs experiments to MLflow
-6. Saves the best performing model to `models/` directory
+### 2. Batch Prediction CLI
 
-### Making Predictions
-
-Predict churn for new customers:
+Score an entire CSV dataset directly from the terminal:
 
 ```bash
+# Score a file and save predictions to CSV
+python -m churn_model.predict --input data/WA_Fn-UseC_-Telco-Customer-Churn.csv --output data/scored_customers.csv
+
+# Run the interactive 2-sample verification demo
 python -m churn_model.predict
 ```
 
-**Input Format:**
+### 3. Python API Integration
 
 ```python
-new_customer = {
-    'tenure': 12,
-    'MonthlyCharges': 70.5,
-    'TotalCharges': 846.0,
-    'Contract': 'Month-to-month',
-    'InternetService': 'Fiber optic',
-    'PaymentMethod': 'Electronic check'
+from churn_model.predict import predict_churn, predict_churn_batch
+import pandas as pd
+
+# Single customer prediction
+customer = {
+    "gender": "Female",
+    "SeniorCitizen": 0,
+    "Partner": "Yes",
+    "Dependents": "No",
+    "tenure": 1,
+    "PhoneService": "Yes",
+    "MultipleLines": "No",
+    "InternetService": "Fiber optic",
+    "OnlineSecurity": "No",
+    "OnlineBackup": "No",
+    "DeviceProtection": "No",
+    "TechSupport": "No",
+    "StreamingTV": "No",
+    "StreamingMovies": "No",
+    "Contract": "Month-to-month",
+    "PaperlessBilling": "Yes",
+    "PaymentMethod": "Electronic check",
+    "MonthlyCharges": 70.35,
+    "TotalCharges": 70.35
 }
+prediction = predict_churn(customer)
+print(prediction)
+# Output: {'predicted_churn': 1, 'churn_probability': 0.9105, 'risk_level': 'HIGH'}
+
+# Batch prediction on a DataFrame
+df = pd.read_csv("data/WA_Fn-UseC_-Telco-Customer-Churn.csv")
+scored_df = predict_churn_batch(df)
 ```
 
-**Output:**
+### 4. REST API Serving (FastAPI)
 
-```python
-{
-    'Predicted_Churn': 1,  # 1 = Will Churn, 0 = Will Stay
-    'Churn_Probability': 0.78  # 78% probability of churning
-}
+Start the API server locally:
+
+```bash
+uvicorn churn_model.api:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### Using the Prediction API
+Interactive API documentation will be available at `http://localhost:8000/docs`.
 
-```python
-from churn_model.predict import predict_churn
+#### Endpoints:
 
-# Single prediction
-result = predict_churn(customer_data)
+- `GET /health`: Liveness and readiness status with loaded model path.
+- `POST /predict`: Real-time single customer inference with risk tier (`LOW`, `MEDIUM`, `HIGH`).
+- `POST /predict/batch`: High-performance batch scoring up to 1,000 customers per request.
 
-# Batch predictions
-results = predict_churn_batch(customers_dataframe)
+### 5. Containerized Deployment (Docker & Compose)
+
+#### Using Docker Compose:
+
+Spins up both the FastAPI prediction service and the persistent MLflow tracking server:
+
+```bash
+docker compose up --build
+```
+
+- FastAPI API: `http://localhost:8000`
+- MLflow UI: `http://localhost:5000`
+
+#### Standalone Docker:
+
+```bash
+docker build -t churn-prediction-api .
+docker run -p 8000:8000 churn-prediction-api
 ```
 
 ---
 
-## Model Performance
+## MLflow Experiment Tracking
 
-### Evaluation Metrics
-
-The models are evaluated using comprehensive metrics:
-
-| Metric       | Description                                  |
-|--------------|----------------------------------------------|
-| **Accuracy** | Overall prediction correctness               |
-| **Precision**| Accuracy of positive churn predictions       |
-| **Recall**   | Coverage of actual churn cases               |
-| **F1-Score** | Harmonic mean of precision and recall        |
-| **ROC AUC**  | Area under the receiver operating curve      |
-
-## MLflow Integration
-
-### Why MLflow?
-
-We integrated MLflow to transition from a "one-off script" approach to a professional **MLOps workflow**. It solves several critical problems:
-
-1.  **Eliminating "Metric Drift"**: Without MLflow, you might run ten experiments and forget which combination of parameters gave the best ROC AUC. MLflow logs everything automatically.
-2.  **Reproducibility**: It captures the exact code version, hyperparameters, and environment, ensuring that a "best model" found today can be recreated six months from now.
-3.  **Model Registry**: It provides a central place to manage model versions, making it easy to track which model is in "Staging" vs "Production".
-4.  **Artifact Management**: It stores not just the model, but also the metadata, plots, and preprocessors associated with a specific training run.
-
-### Where is it Implemented?
-
-The MLflow logic is primarily situated in:
-*   **`churn_model/model_training.py`**: The `ModelTrainer.train()` method wraps the training loop in an `mlflow.start_run()` context. It uses:
-    *   `mlflow.log_params()`: To save model settings (e.g., `n_estimators`, `C`).
-    *   `mlflow.log_metrics()`: To save performance scores (ROC AUC, F1).
-    *   `mlflow.sklearn.log_model()`: To serialize and save the model artifact.
-*   **`churn_model/main.py`**: Coordinates the experiment naming and ensures all runs are grouped under the `customer_churn_analysis` experiment.
-
-### Viewing Experiments
-
-Launch the MLflow UI to explore experiments:
+Launch the MLflow UI locally to inspect runs, parameters, metrics, and registered models:
 
 ```bash
 mlflow ui
 ```
 
-Navigate to `http://localhost:5000` to view:
-- Experiment runs and comparisons
-- Hyperparameter configurations
-- Performance metrics over time
-- Model artifacts and versions
+Open `http://localhost:5000` to visualize:
 
-### Model Registry
+- Comparative ROC AUC and F1 curves across Random Forest, Logistic Regression, and XGBoost.
+- Optimal threshold comparisons.
+- Versioned model artifacts in the MLflow Model Registry.
 
-Access trained models programmatically:
+---
 
-```python
-import mlflow
+## Automated Testing & CI/CD
 
-# Load a specific model version
-model_uri = "runs:/<run_id>/model"
-loaded_model = mlflow.sklearn.load_model(model_uri)
+Run the test suite covering data preprocessing, single-sample inference consistency, threshold optimization, and API endpoints:
+
+```bash
+pytest tests -v
 ```
+
+GitHub Actions automatically runs this suite and verifies the Docker container build on every push and pull request to `main`.
 
 ---
 
 ## Configuration
 
-### Customizing Training Parameters
+Custom settings can be modified via environment variables or [`churn_model/config.py`](churn_model/config.py):
 
-Edit `config.py` to adjust:
-
-```python
-# Model hyperparameters
-RANDOM_FOREST_PARAMS = {
-    'n_estimators': 100,
-    'max_depth': 10,
-    'min_samples_split': 5
-}
-
-LOGISTIC_REGRESSION_PARAMS = {
-    'C': 1.0,
-    'max_iter': 1000,
-    'solver': 'lbfgs'
-}
-
-# Data processing
-TEST_SIZE = 0.2
-RANDOM_STATE = 42
-SCALING_METHOD = 'standard'
-```
-
-### Dataset Configuration
-
-Update the data path in `main.py`:
-
-```python
-DATA_PATH = 'data/your_dataset.csv'
-TARGET_COLUMN = 'Churn'
-```
-
----
-
-## Future Roadmap
-
-### Short-term Goals
-- [ ] Add XGBoost and LightGBM models
-- [ ] Implement feature importance visualization
-- [ ] Add cross-validation with stratified K-fold
-- [ ] Create automated hyperparameter tuning with Optuna
-
-### MLOps Deployment (In Progress)
-- [ ] Containerization with Docker
-- [ ] CI/CD pipeline integration
-- [ ] Model monitoring and drift detection
-- [ ] REST API with FastAPI
-- [ ] Kubernetes deployment configuration
-- [ ] Automated retraining pipeline
-- [ ] A/B testing framework
-
-### Long-term Vision
-- [ ] Real-time streaming predictions
-- [ ] Customer segmentation integration
-- [ ] Explainable AI dashboard with SHAP values
-- [ ] Multi-cloud deployment support
-- [ ] Advanced ensemble methods
-
----
-
-## Contributing
-
-We welcome contributions! Please follow these steps:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-### Development Guidelines
-
-- Follow PEP 8 style guidelines
-- Add unit tests for new features
-- Update documentation for API changes
-- Ensure all tests pass before submitting PR
+| Variable              | Default Value                               | Description                                     |
+| :-------------------- | :------------------------------------------ | :---------------------------------------------- |
+| `RANDOM_STATE`        | `42`                                        | Seed for reproducibility                        |
+| `TEST_SIZE`           | `0.3`                                       | Test + Validation split ratio                   |
+| `VAL_SIZE`            | `0.5`                                       | Split ratio between validation and test holdout |
+| `DATA_PATH`           | `data/WA_Fn-UseC_-Telco-Customer-Churn.csv` | Dataset path                                    |
+| `MODEL_PATH`          | `models`                                    | Directory for serialized artifacts              |
+| `EXPERIMENT_NAME`     | `churn_prediction`                          | MLflow experiment name                          |
+| `MLFLOW_TRACKING_URI` | `None` (local `./mlruns`)                   | Remote or local tracking server URI             |
 
 ---
 
 ## License
 
-This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details.
-
----
-
-## Support and Contact
-
-For questions, issues, or contributions:
-
-- **Issues**: Open an issue on GitHub
-- **Discussions**: Use GitHub Discussions for questions
-- **Email**: naveena003office@gmail.com
-
----
-
-## Acknowledgments
-
-- Dataset: [Telco Customer Churn Dataset](https://www.kaggle.com/datasets/blastchar/telco-customer-churn)
-- Inspired by best practices from the MLOps community
-- Built with open-source tools and frameworks
-
----
-
-**Built with 🤖 by the Naveena Natarajan**
+This project is licensed under the [MIT License](LICENSE).
